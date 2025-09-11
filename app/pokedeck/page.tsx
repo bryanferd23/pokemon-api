@@ -29,7 +29,10 @@ import { TYPE_COLORS } from '@/lib/types/pokemon';
 import { 
   pokedeckStore,
   getPokédeckStats,
-  searchPokédeck 
+  searchPokédeck,
+  exportPokédeckAsync,
+  removeMultipleFromPokédeck,
+  getPokedeckPerformanceStats
 } from '@/lib/store/pokedeck';
 import { cn } from '@/lib/utils';
 
@@ -44,6 +47,10 @@ export default function PokedeckPage() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedPokemon, setSelectedPokemon] = useState<Set<number>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
 
   useEffect(() => {
     // Initial load
@@ -119,17 +126,75 @@ export default function PokedeckPage() {
     setSortOrder('desc');
   };
 
-  const exportPokedeck = () => {
-    const data = pokedeckStore.export();
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pokedeck-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  // Selection functions
+  const toggleSelection = (pokemonId: number) => {
+    const newSelected = new Set(selectedPokemon);
+    if (newSelected.has(pokemonId)) {
+      newSelected.delete(pokemonId);
+    } else {
+      newSelected.add(pokemonId);
+    }
+    setSelectedPokemon(newSelected);
+  };
+
+  const selectAll = () => {
+    const allIds = new Set(filteredPokedeck.map(p => p.id));
+    setSelectedPokemon(allIds);
+  };
+
+  const deselectAll = () => {
+    setSelectedPokemon(new Set());
+  };
+
+  const deleteSelected = async () => {
+    if (selectedPokemon.size === 0) return;
+    
+    const count = selectedPokemon.size;
+    if (!confirm(`Are you sure you want to remove ${count} Pokémon from your Pokédeck? This action cannot be undone.`)) {
+      return;
+    }
+    
+    const ids = Array.from(selectedPokemon);
+    const result = removeMultipleFromPokédeck(ids);
+    
+    setSelectedPokemon(new Set());
+    setIsSelectionMode(false);
+    
+    alert(`Successfully removed ${result.removed} Pokémon from your Pokédeck.`);
+  };
+
+  const toggleSelectionMode = () => {
+    setIsSelectionMode(!isSelectionMode);
+    if (isSelectionMode) {
+      setSelectedPokemon(new Set());
+    }
+  };
+
+  const exportPokedeck = async () => {
+    setIsExporting(true);
+    setExportProgress(0);
+    
+    try {
+      const data = await exportPokédeckAsync((progress) => {
+        setExportProgress(progress);
+      });
+      
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pokedeck-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export failed. Please try again.');
+    } finally {
+      setIsExporting(false);
+      setExportProgress(0);
+    }
   };
 
   const importPokedeck = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -199,9 +264,14 @@ export default function PokedeckPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={exportPokedeck} className="gap-2">
+          <Button 
+            variant="outline" 
+            onClick={exportPokedeck} 
+            disabled={isExporting}
+            className="gap-2"
+          >
             <Download className="h-4 w-4" />
-            Export
+            {isExporting ? `Exporting... ${Math.round(exportProgress)}%` : 'Export'}
           </Button>
           
           <div className="relative">
@@ -216,6 +286,17 @@ export default function PokedeckPage() {
               Import
             </Button>
           </div>
+          
+          {pokedeck.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={toggleSelectionMode}
+              className="gap-2"
+            >
+              <Type className="h-4 w-4" />
+              {isSelectionMode ? 'Cancel' : 'Select'}
+            </Button>
+          )}
           
           {pokedeck.length > 0 && (
             <Button
@@ -419,7 +500,44 @@ export default function PokedeckPage() {
               <div className="flex items-center justify-between mb-4">
                 <p className="text-sm text-muted-foreground">
                   Showing {filteredPokedeck.length} of {pokedeck.length} Pokémon
+                  {isSelectionMode && selectedPokemon.size > 0 && (
+                    <span className="ml-2 font-medium">
+                      ({selectedPokemon.size} selected)
+                    </span>
+                  )}
                 </p>
+                
+                {/* Bulk Actions */}
+                {isSelectionMode && (
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={selectAll}
+                      disabled={filteredPokedeck.length === selectedPokemon.size}
+                    >
+                      Select All
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={deselectAll}
+                      disabled={selectedPokemon.size === 0}
+                    >
+                      Deselect All
+                    </Button>
+                    <Button 
+                      variant="destructive" 
+                      size="sm" 
+                      onClick={deleteSelected}
+                      disabled={selectedPokemon.size === 0}
+                      className="gap-1"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Delete ({selectedPokemon.size})
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <div className={cn(
@@ -428,12 +546,36 @@ export default function PokedeckPage() {
                   : "space-y-4"
               )}>
                 {filteredPokedeck.map((entry) => (
-                  <Link
-                    key={entry.id}
-                    href={`/pokemon/${entry.name}`}
-                    className="block transition-transform duration-200 hover:scale-[0.98]"
-                  >
-                    <Card className="group relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-primary/20">
+                  <div key={entry.id} className="relative">
+                    {isSelectionMode && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedPokemon.has(entry.id)}
+                          onChange={() => toggleSelection(entry.id)}
+                          className="h-4 w-4 rounded border-gray-300"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    )}
+                    <Link
+                      href={`/pokemon/${entry.name}`}
+                      className={cn(
+                        "block transition-transform duration-200 hover:scale-[0.98]",
+                        isSelectionMode && "pointer-events-none"
+                      )}
+                      onClick={(e) => {
+                        if (isSelectionMode) {
+                          e.preventDefault();
+                          toggleSelection(entry.id);
+                        }
+                      }}
+                    >
+                      <Card className={cn(
+                        "group relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-primary/20",
+                        isSelectionMode && selectedPokemon.has(entry.id) && "ring-2 ring-primary",
+                        isSelectionMode && "cursor-pointer"
+                      )}>
                       <CardContent className={cn(
                         "p-4 flex",
                         viewMode === 'grid' ? 'flex-col items-center text-center h-64' : 'items-center space-x-4 h-24'
@@ -444,10 +586,14 @@ export default function PokedeckPage() {
                         )}>
                           <Image
                             src={entry.sprite}
-                            alt={entry.name}
+                            alt={`${entry.name} - ${entry.types.join(', ')} type Pokemon from your Pokedeck collection`}
                             width={viewMode === 'grid' ? 96 : 64}
                             height={viewMode === 'grid' ? 96 : 64}
+                            sizes={viewMode === 'grid' ? '96px' : '64px'}
                             className="object-contain transition-transform duration-300 group-hover:scale-110"
+                            loading="lazy"
+                            placeholder="blur"
+                            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAQABADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                           />
                         </div>
 
@@ -500,6 +646,7 @@ export default function PokedeckPage() {
                       </CardContent>
                     </Card>
                   </Link>
+                  </div>
                 ))}
               </div>
             </>

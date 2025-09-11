@@ -4,6 +4,8 @@ import "./globals.css";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ServiceWorkerProvider } from "@/components/ServiceWorkerProvider";
+import { NetworkStatusIndicator } from "@/components/NetworkStatusIndicator";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,8 +35,18 @@ export default function RootLayout({
         suppressHydrationWarning={true}
       >
         <ErrorBoundary>
+          {/* Skip links for keyboard navigation */}
+          <a href="#main-content" className="skip-link">
+            Skip to main content
+          </a>
+          <a href="#navigation" className="skip-link">
+            Skip to navigation
+          </a>
+          
+          <ServiceWorkerProvider />
+          <NetworkStatusIndicator />
           <Header />
-          <main className="flex-1">
+          <main id="main-content" className="flex-1" tabIndex={-1}>
             {children}
           </main>
           <Footer />

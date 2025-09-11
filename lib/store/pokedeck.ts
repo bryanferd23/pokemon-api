@@ -2,6 +2,8 @@ import { PokedeckEntry } from '@/lib/types/pokemon';
 
 const POKEDECK_KEY = 'pokemon-pokedeck';
 const MAX_POKEDECK_SIZE = 50; // Reasonable limit for performance
+const BATCH_SIZE = 20; // For bulk operations
+const STATS_CACHE_TTL = 5000; // Cache stats for 5 seconds
 
 // Pokedeck storage utilities
 export class PokedeckStore {
@@ -41,6 +43,7 @@ export class PokedeckStore {
     try {
       const entries = Array.from(this.pokedeck.values());
       localStorage.setItem(POKEDECK_KEY, JSON.stringify(entries));
+      this.invalidateStatsCache(); // Invalidate cache when data changes
       this.notifyListeners();
     } catch (error) {
       console.error('Error saving Pokedeck to storage:', error);
@@ -144,31 +147,86 @@ export class PokedeckStore {
     this.saveToStorage();
   }
 
+  // Memoized stats calculation for better performance
+  private statsCache: {
+    lastUpdate: number;
+    stats: {
+      total: number;
+      typeBreakdown: Record<string, number>;
+      oldestEntry: PokedeckEntry | null;
+      newestEntry: PokedeckEntry | null;
+      averagePerType: number;
+      mostCommonType: string | null;
+      rarest: PokedeckEntry | null;
+    };
+  } | null = null;
+
+  private invalidateStatsCache(): void {
+    this.statsCache = null;
+  }
+
   public getStats(): {
     total: number;
     typeBreakdown: Record<string, number>;
     oldestEntry: PokedeckEntry | null;
     newestEntry: PokedeckEntry | null;
+    averagePerType: number;
+    mostCommonType: string | null;
+    rarest: PokedeckEntry | null;
   } {
+    // Check cache validity (5 seconds)
+    if (this.statsCache && Date.now() - this.statsCache.lastUpdate < 5000) {
+      return this.statsCache.stats;
+    }
+
     const entries = this.getAll();
     const typeBreakdown: Record<string, number> = {};
+    const typeSet = new Set<string>();
 
     entries.forEach(entry => {
       entry.types.forEach(type => {
         typeBreakdown[type] = (typeBreakdown[type] || 0) + 1;
+        typeSet.add(type);
       });
     });
 
-    const sortedByDate = entries.sort((a, b) =>
+    const sortedByDate = [...entries].sort((a, b) =>
       new Date(a.dateAdded).getTime() - new Date(b.dateAdded).getTime()
     );
 
-    return {
+    // Find most common type
+    let mostCommonType: string | null = null;
+    let maxCount = 0;
+    Object.entries(typeBreakdown).forEach(([type, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        mostCommonType = type;
+      }
+    });
+
+    // Find rarest Pokemon (lowest ID = older generation)
+    const rarest = entries.reduce((rare, entry) => 
+      rare === null || entry.id < rare.id ? entry : rare, 
+      null as PokedeckEntry | null
+    );
+
+    const stats = {
       total: entries.length,
       typeBreakdown,
       oldestEntry: sortedByDate[0] || null,
       newestEntry: sortedByDate[sortedByDate.length - 1] || null,
+      averagePerType: typeSet.size > 0 ? entries.length / typeSet.size : 0,
+      mostCommonType,
+      rarest
     };
+
+    // Cache the results
+    this.statsCache = {
+      lastUpdate: Date.now(),
+      stats
+    };
+
+    return stats;
   }
 
   public subscribe(listener: (pokedeck: PokedeckEntry[]) => void): () => void {
@@ -180,11 +238,109 @@ export class PokedeckStore {
     };
   }
 
+  // Bulk operations for better performance
+  public addMultiple(pokemon: Array<{
+    id: number;
+    name: string;
+    sprite: string;
+    types: string[];
+  }>): { added: number; skipped: number; errors: string[] } {
+    const results = { added: 0, skipped: 0, errors: [] as string[] };
+    const batchSize = 10; // Process in batches to avoid blocking UI
+    
+    for (let i = 0; i < pokemon.length; i += batchSize) {
+      const batch = pokemon.slice(i, i + batchSize);
+      
+      batch.forEach(p => {
+        try {
+          if (this.pokedeck.has(p.id)) {
+            results.skipped++;
+          } else if (this.pokedeck.size >= MAX_POKEDECK_SIZE) {
+            results.errors.push(`Pokedeck full, cannot add ${p.name}`);
+          } else {
+            const entry: PokedeckEntry = {
+              ...p,
+              dateAdded: new Date().toISOString(),
+            };
+            this.pokedeck.set(p.id, entry);
+            results.added++;
+          }
+        } catch (error) {
+          results.errors.push(`Failed to add ${p.name}: ${error}`);
+        }
+      });
+    }
+    
+    if (results.added > 0) {
+      this.saveToStorage();
+    }
+    
+    return results;
+  }
+
+  public removeMultiple(pokemonIds: number[]): { removed: number; notFound: number } {
+    const results = { removed: 0, notFound: 0 };
+    
+    pokemonIds.forEach(id => {
+      if (this.pokedeck.has(id)) {
+        this.pokedeck.delete(id);
+        results.removed++;
+      } else {
+        results.notFound++;
+      }
+    });
+    
+    if (results.removed > 0) {
+      this.saveToStorage();
+    }
+    
+    return results;
+  }
+
+  // Performance optimized export with progress callback
+  public exportAsync(progressCallback?: (progress: number) => void): Promise<string> {
+    return new Promise((resolve) => {
+      const entries = this.getAll();
+      const total = entries.length;
+      let processed = 0;
+      
+      const processEntries = () => {
+        const batchSize = 50;
+        const endIndex = Math.min(processed + batchSize, total);
+        
+        // Process a batch
+        while (processed < endIndex) {
+          processed++;
+          if (progressCallback) {
+            progressCallback((processed / total) * 100);
+          }
+        }
+        
+        if (processed < total) {
+          // Schedule next batch
+          setTimeout(processEntries, 0);
+        } else {
+          // Complete
+          const data = {
+            version: '1.0',
+            exportDate: new Date().toISOString(),
+            entries,
+            stats: this.getStats()
+          };
+          resolve(JSON.stringify(data, null, 2));
+        }
+      };
+      
+      processEntries();
+    });
+  }
+
   public export(): string {
     const data = {
       version: '1.0',
       exportDate: new Date().toISOString(),
       entries: this.getAll(),
+      stats: this.getStats()
     };
     return JSON.stringify(data, null, 2);
   }
@@ -236,7 +392,7 @@ export class PokedeckStore {
 // Singleton instance
 export const pokedeckStore = PokedeckStore.getInstance();
 
-// Convenience functions for direct usage
+// Enhanced convenience functions for direct usage
 export const addToPokédeck = (pokemon: {
   id: number;
   name: string;
@@ -244,13 +400,26 @@ export const addToPokédeck = (pokemon: {
   types: string[];
 }) => pokedeckStore.add(pokemon);
 
+export const addMultipleToPokédeck = (pokemon: Array<{
+  id: number;
+  name: string;
+  sprite: string;
+  types: string[];
+}>) => pokedeckStore.addMultiple(pokemon);
+
 export const removeFromPokédeck = (pokemonId: number) =>
   pokedeckStore.remove(pokemonId);
+
+export const removeMultipleFromPokédeck = (pokemonIds: number[]) =>
+  pokedeckStore.removeMultiple(pokemonIds);
 
 export const isInPokédeck = (pokemonId: number) =>
   pokedeckStore.has(pokemonId);
 
 export const getPokédeck = () => pokedeckStore.getAll();
+
+export const getPokédeckSorted = (sortBy: 'name' | 'id' | 'dateAdded' = 'dateAdded') => 
+  pokedeckStore.getAllSorted(sortBy);
 
 export const getPokédeckCount = () => pokedeckStore.count();
 
@@ -259,3 +428,22 @@ export const clearPokédeck = () => pokedeckStore.clear();
 export const searchPokédeck = (query: string) => pokedeckStore.search(query);
 
 export const getPokédeckStats = () => pokedeckStore.getStats();
+
+export const exportPokédeck = () => pokedeckStore.export();
+
+export const exportPokédeckAsync = (progressCallback?: (progress: number) => void) =>
+  pokedeckStore.exportAsync(progressCallback);
+
+export const importPokédeck = (jsonData: string) => pokedeckStore.import(jsonData);
+
+export const subscribeToPokédeck = (listener: (pokedeck: PokedeckEntry[]) => void) =>
+  pokedeckStore.subscribe(listener);
+
+// Performance utilities
+export const getPokedeckPerformanceStats = () => ({
+  size: pokedeckStore.count(),
+  maxSize: MAX_POKEDECK_SIZE,
+  isEmpty: pokedeckStore.isEmpty(),
+  memoryUsage: JSON.stringify(pokedeckStore.getAll()).length,
+  lastStatsUpdate: pokedeckStore['statsCache']?.lastUpdate || null
+});

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Menu, Search, Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { pokedeckStore } from '@/lib/store/pokedeck';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 export function Header() {
   const pathname = usePathname();
@@ -47,7 +48,7 @@ export function Header() {
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-6">
+          <nav id="navigation" className="hidden md:flex items-center space-x-6" role="navigation" aria-label="Main navigation">
             {navItems.map((item) => (
               <Link
                 key={item.href}
@@ -68,12 +69,14 @@ export function Header() {
             ))}
           </nav>
 
-          {/* Quick Search Button */}
+          {/* Theme Toggle & Search Controls */}
           <div className="flex items-center space-x-2">
+            <ThemeToggle />
             <Button
               variant="outline"
               size="sm"
               className="hidden sm:flex items-center space-x-2 text-muted-foreground"
+              aria-label="Search Pokemon"
               onClick={() => {
                 // Will implement global search later
                 const searchInput = document.getElementById('search-input');
@@ -94,6 +97,9 @@ export function Header() {
               variant="ghost"
               size="sm"
               className="md:hidden"
+              aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-navigation"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
               <Menu className="h-5 w-5" />
@@ -103,8 +109,8 @@ export function Header() {
 
         {/* Mobile Navigation */}
         {isMobileMenuOpen && (
-          <div className="md:hidden border-t bg-background/95 backdrop-blur">
-            <nav className="flex flex-col space-y-1 py-4">
+          <div id="mobile-navigation" className="md:hidden border-t bg-background/95 backdrop-blur">
+            <nav className="flex flex-col space-y-1 py-4" role="navigation" aria-label="Mobile navigation">
               {navItems.map((item) => (
                 <Link
                   key={item.href}

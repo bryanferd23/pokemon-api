@@ -261,12 +261,15 @@ export function PokemonDetails({
                 {!imageError ? (
                   <Image
                     src={getPokemonSprite(pokemon)}
-                    alt={pokemon.name}
+                    alt={`${pokemon.name} - ${pokemon.types.map(t => t.type.name).join(', ')} type Pokemon from the Pokedex`}
                     width={256}
                     height={256}
+                    sizes="256px"
                     className="object-contain"
                     onError={() => setImageError(true)}
                     priority
+                    placeholder="blur"
+                    blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAQABADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                   />
                 ) : (
                   <div className="w-64 h-64 bg-muted rounded-lg flex items-center justify-center">

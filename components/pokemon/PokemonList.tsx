@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ChevronLeft, ChevronRight, RotateCcw, AlertCircle } from 'lucide-react';
 import { Pokemon, SearchFilters, PaginationInfo } from '@/lib/types/pokemon';
 import { PokemonCard } from './PokemonCard';
+import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { cn } from '@/lib/utils';
 
 interface PokemonListProps {
@@ -35,6 +36,36 @@ export function PokemonList({
   className
 }: PokemonListProps) {
   const [displayedPokemon, setDisplayedPokemon] = useState<Pokemon[]>([]);
+
+  // Calculate columns for keyboard navigation
+  const getColumnsCount = () => {
+    if (variant === 'list') return 1;
+    // Based on grid classes: 2 sm:3 md:4 lg:5 xl:6
+    if (typeof window !== 'undefined') {
+      const width = window.innerWidth;
+      if (width >= 1280) return 6; // xl
+      if (width >= 1024) return 5; // lg
+      if (width >= 768) return 4;  // md
+      if (width >= 640) return 3;  // sm
+      return 2; // default
+    }
+    return 4; // fallback
+  };
+
+  // Keyboard navigation
+  const { setInitialFocus, resetFocus } = useKeyboardNavigation({
+    itemCount: displayedPokemon.length,
+    columnsCount: getColumnsCount(),
+    onSelect: (index) => {
+      // Navigate to selected Pokemon
+      const pokemon = displayedPokemon[index];
+      if (pokemon) {
+        window.location.href = `/pokemon/${pokemon.name}`;
+      }
+    },
+    enabled: displayedPokemon.length > 0,
+    containerSelector: '[role="grid"]',
+  });
 
   // Filter and sort Pokemon based on search query and filters
   const filteredAndSortedPokemon = useMemo(() => {
@@ -97,7 +128,8 @@ export function PokemonList({
   // Update displayed Pokemon when filtered results change
   useEffect(() => {
     setDisplayedPokemon(filteredAndSortedPokemon);
-  }, [filteredAndSortedPokemon]);
+    resetFocus(); // Reset focus when content changes
+  }, [filteredAndSortedPokemon, resetFocus]);
 
   // Calculate pagination info for filtered results
   const filteredPagination = useMemo(() => {
@@ -223,18 +255,36 @@ export function PokemonList({
         )}
       </div>
 
+      {/* Keyboard Navigation Instructions */}
+      <div className="sr-only" aria-live="polite">
+        Use arrow keys to navigate through Pokemon. Press Enter or Space to select a Pokemon. Use Home/End to jump to first/last Pokemon.
+      </div>
+
       {/* Pokemon Grid/List */}
-      <div className={cn(
-        variant === 'grid' 
-          ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 auto-rows-fr"
-          : "space-y-4"
-      )}>
-        {displayedPokemon.map((pokemon) => (
-          <PokemonCard
+      <div 
+        className={cn(
+          variant === 'grid' 
+            ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 auto-rows-fr"
+            : "space-y-4"
+        )}
+        role="grid"
+        aria-label={`Pokemon ${variant} containing ${displayedPokemon.length} Pokemon`}
+        tabIndex={0}
+        onFocus={() => setInitialFocus()}
+      >
+        {displayedPokemon.map((pokemon, index) => (
+          <div
             key={pokemon.id}
-            pokemon={pokemon}
-            variant={variant === 'list' ? 'compact' : 'default'}
-          />
+            role="gridcell"
+            aria-rowindex={variant === 'grid' ? Math.floor(index / getColumnsCount()) + 1 : index + 1}
+            aria-colindex={variant === 'grid' ? (index % getColumnsCount()) + 1 : 1}
+            tabIndex={index === 0 ? 0 : -1}
+          >
+            <PokemonCard
+              pokemon={pokemon}
+              variant={variant === 'list' ? 'compact' : 'default'}
+            />
+          </div>
         ))}
       </div>
 

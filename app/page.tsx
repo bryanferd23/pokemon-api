@@ -17,6 +17,7 @@ import {
 import { Pokemon, SearchFilters } from '@/lib/types/pokemon';
 import { fetchPokemonList, searchPokemon } from '@/lib/api/pokemon';
 import { getPokédeckCount } from '@/lib/store/pokedeck';
+import { preloadCriticalPokemonImages } from '@/lib/utils/image-preloader';
 
 export default function Home() {
   const [featuredPokemon, setFeaturedPokemon] = useState<Pokemon[]>([]);
@@ -45,9 +46,11 @@ export default function Home() {
   useEffect(() => {
     loadFeaturedPokemon();
     setPokedeckCount(getPokédeckCount());
+    // Preload critical Pokemon images for immediate availability
+    preloadCriticalPokemonImages();
   }, [loadFeaturedPokemon]);
 
-  const handleSearch = async (query: string) => {
+  const handleSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
     
     if (!query.trim()) {
@@ -66,12 +69,12 @@ export default function Home() {
     } finally {
       setIsSearching(false);
     }
-  };
+  }, []);
 
-  const handleFiltersChange = (filters: SearchFilters) => {
+  const handleFiltersChange = useCallback((filters: SearchFilters) => {
     // For home page, we can ignore filters or implement basic filtering
     console.log('Filters changed:', filters);
-  };
+  }, []);
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
