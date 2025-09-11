@@ -65,11 +65,11 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="container mx-auto px-4 py-16 max-w-2xl">
+        <div className="container mx-auto px-4 py-16 max-w-2xl" role="alert" aria-live="assertive">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
-                <AlertTriangle className="h-6 w-6" />
+                <AlertTriangle className="h-6 w-6" aria-hidden="true" />
                 Something went wrong
               </CardTitle>
             </CardHeader>
@@ -108,19 +108,26 @@ export class ErrorBoundary extends Component<Props, State> {
                 </details>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                <Button onClick={this.handleReset} className="gap-2">
-                  <RefreshCw className="h-4 w-4" />
+              <div className="flex flex-col sm:flex-row gap-3 pt-4" role="group" aria-label="Error recovery actions">
+                <Button onClick={this.handleReset} className="gap-2" aria-describedby="try-again-description">
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
                   Try Again
                 </Button>
-                <Button variant="outline" onClick={this.handleReload} className="gap-2">
-                  <RefreshCw className="h-4 w-4" />
+                <Button variant="outline" onClick={this.handleReload} className="gap-2" aria-describedby="reload-description">
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
                   Reload Page
                 </Button>
-                <Button variant="outline" onClick={this.goHome} className="gap-2">
-                  <Home className="h-4 w-4" />
+                <Button variant="outline" onClick={this.goHome} className="gap-2" aria-describedby="home-description">
+                  <Home className="h-4 w-4" aria-hidden="true" />
                   Go Home
                 </Button>
+              </div>
+              
+              {/* Screen reader descriptions */}
+              <div className="sr-only">
+                <div id="try-again-description">Attempt to recover from the error by retrying the failed operation</div>
+                <div id="reload-description">Refresh the entire page to clear any cached errors</div>
+                <div id="home-description">Navigate to the homepage to start fresh</div>
               </div>
             </CardContent>
           </Card>

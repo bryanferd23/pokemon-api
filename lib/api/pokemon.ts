@@ -66,14 +66,24 @@ async function apiRequest<T>(endpoint: string): Promise<T> {
     const response = await fetch(`${BASE_URL}${endpoint}`);
     
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      // Handle different error types
+      if (response.status === 404) {
+        throw new Error(`Pokemon not found: ${endpoint}`);
+      } else if (response.status >= 500) {
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      } else {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
     }
     
     const data = await response.json();
     setCache(cacheKey, data);
     return data;
   } catch (error) {
-    console.error(`API Error for ${endpoint}:`, error);
+    // Only log non-404 errors to reduce console noise
+    if (!(error instanceof Error) || !error.message.includes('Pokemon not found')) {
+      console.error(`API Error for ${endpoint}:`, error);
+    }
     throw error;
   }
 }
@@ -133,14 +143,39 @@ export async function searchPokemon(query: string): Promise<Pokemon[]> {
   }
   
   try {
-    // For search, we'll fetch a larger list and filter client-side
-    // This is more efficient than making individual API calls
-    const { pokemon } = await fetchPokemonList(1000, 0);
+    // Check if query is numeric (Pokemon ID search)
+    const numericQuery = parseInt(query, 10);
+    if (!isNaN(numericQuery) && numericQuery > 0 && numericQuery <= 1010) {
+      try {
+        const pokemon = await fetchPokemonById(numericQuery);
+        const result = [pokemon];
+        setCache(cacheKey, result);
+        return result;
+      } catch {
+        // Pokemon with this ID not found, continue with name search
+        // Don't log - this is expected behavior for invalid IDs
+      }
+    }
+    
+    // For name search, try direct API call first
+    if (query.length >= 3) {
+      try {
+        const pokemon = await fetchPokemonByName(query);
+        const result = [pokemon];
+        setCache(cacheKey, result);
+        return result;
+      } catch {
+        // Exact name not found, fall through to partial search
+        // Don't log - this is expected behavior for partial matches
+      }
+    }
+    
+    // Only fetch a smaller subset for partial name matching
+    const { pokemon } = await fetchPokemonList(151, 0); // Only first 151 Pokemon
     
     const filteredPokemon = pokemon.filter(p =>
-      p.name.toLowerCase().includes(query.toLowerCase()) ||
-      p.id.toString().includes(query)
-    );
+      p.name.toLowerCase().includes(query.toLowerCase())
+    ).slice(0, 8); // Limit results to 8 for autocomplete
     
     setCache(cacheKey, filteredPokemon);
     return filteredPokemon;

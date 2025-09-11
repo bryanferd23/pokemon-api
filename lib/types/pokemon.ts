@@ -144,6 +144,7 @@ export interface SearchFilters {
   maxId?: number;
   sortBy?: 'id' | 'name' | 'height' | 'weight';
   sortOrder?: 'asc' | 'desc';
+  preset?: string;
 }
 
 export interface PaginationInfo {
