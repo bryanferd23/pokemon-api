@@ -176,18 +176,33 @@ export default function PokedeckPage() {
     
     try {
       const data = await exportPokédeckAsync((progress) => {
-        setExportProgress(progress);
+        // Use requestAnimationFrame to avoid blocking the main thread
+        requestAnimationFrame(() => {
+          setExportProgress(progress);
+        });
       });
       
       const blob = new Blob([data], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `pokedeck-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      
+      // Use requestAnimationFrame for DOM manipulation to avoid forced reflows
+      requestAnimationFrame(() => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `pokedeck-${new Date().toISOString().split('T')[0]}.json`;
+        a.style.position = 'absolute';
+        a.style.left = '-9999px';
+        a.setAttribute('aria-hidden', 'true');
+        
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up after download
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+      });
     } catch (error) {
       console.error('Export failed:', error);
       alert('Export failed. Please try again.');
