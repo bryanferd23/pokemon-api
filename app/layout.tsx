@@ -10,11 +10,15 @@ import { NetworkStatusIndicator } from "@/components/NetworkStatusIndicator";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
+  preload: true,
 });
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+  variable: "--font-geist-mono", 
   subsets: ["latin"],
+  display: "swap",
+  preload: true,
 });
 
 export const metadata: Metadata = {
@@ -30,6 +34,46 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link
+          rel="preconnect"
+          href="https://fonts.googleapis.com"
+        />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preconnect"
+          href="https://raw.githubusercontent.com"
+        />
+        <link
+          rel="preconnect"
+          href="https://pokeapi.co"
+        />
+        <link
+          rel="dns-prefetch"
+          href="https://assets.pokemon.com"
+        />
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              @font-face {
+                font-family: 'Geist-fallback';
+                font-style: normal;
+                font-weight: 100 900;
+                font-display: swap;
+                src: local('Arial'), local('Helvetica'), local('sans-serif');
+                size-adjust: 105%;
+                ascent-override: 92%;
+                descent-override: 23%;
+                line-gap-override: 0%;
+              }
+            `,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
         suppressHydrationWarning={true}
